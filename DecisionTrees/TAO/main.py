@@ -32,7 +32,7 @@ T.initialize_from_CART(data, label, clf)
 #print(T.get_path_to(x, 0))
 T.print_tree_structure()
 
-print ("T acc -> ", 1-T.misclassification_loss(data, label, 0))
+print ("T acc -> ", 1-T.misclassification_loss(data, label, T.tree[0]))
 print ("clf acc -> ", clf.score(data, label))
 #node_id = 4
 #x = data[T.tree[node_id].data_idxs]
@@ -47,20 +47,21 @@ tao.evolve(data, label)
 L = ClassificationTree()
 L.initialize_from_CART(data, label, clf)
 ls = LocalSearch(L)
-to_delete = ls.evolve(data, label)
+ls.evolve(data, label, alfa=50)
+#to_delete = ls.evolve(data, label)
 #T.print_tree_structure()
 #for (id, node) in T.tree.items():
     #print("Dopo: node ", id, " items -->", node.data_idxs)
 
-print ("LS acc -> ", 1-L.misclassification_loss(data, label, 0))
-print ("TAO acc -> ", 1-T.misclassification_loss(data, label, 0))
+print ("LS acc -> ", 1-L.misclassification_loss(data, label, L.tree[0]))
+print ("TAO acc -> ", 1-T.misclassification_loss(data, label, T.tree[0]))
 print ("CART acc -> ", clf.score(data, label))
 
 L.print_tree_structure()
 #T.print_tree_structure()
 test = data[50:51]
 lab = label[50:51]
-print(to_delete)
+#print(to_delete)
 #print (lab)
 #print (L.predict_label(test, 0))
 #print (to_delete)

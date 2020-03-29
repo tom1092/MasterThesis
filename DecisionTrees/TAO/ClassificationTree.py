@@ -23,11 +23,13 @@ JitNode = [
 '''
 #@jitclass(JitNode)
 class TreeNode:
-    def __init__(self, id, depth, left_node, right_node, feature, threshold, is_leaf, value):
+    def __init__(self, id, depth, left_node_id, right_node_id, left_node, right_node, feature, threshold, is_leaf, value):
         self.id = id
         self.depth = depth
-        self.left_node_id = left_node
-        self.right_node_id = right_node
+        self.left_node_id = left_node_id
+        self.right_node_id = right_node_id
+        self.left_node = left_node
+        self.right_node = right_node
         self.feature = feature
         self.threshold = threshold
         self.is_leaf = is_leaf
@@ -36,6 +38,14 @@ class TreeNode:
         self.data_idxs = []
 
 
+    #Dato un nodo ne restituisce uno nuovo con stessi attributi
+    @staticmethod
+    def copy_node(node):
+        new = TreeNode(node.id, node.depth, node.left_node_id, node.right_node_id, node.left_node, node.right_node, node.feature, node.threshold, node.is_leaf, node.value)
+        new.parent_id = node.parent_id
+        new.data_idxs = node.data_idxs
+        return new
+
 
 class ClassificationTree:
 
@@ -43,6 +53,8 @@ class ClassificationTree:
         self.tree = {}
         self.tree_depth = -1
         self.min_samples = min_samples
+        self.depth = None
+        self.n_leaves = None
 
     #Crea l'albero iniziale usando CART
     def initialize_from_CART(self, data, label, clf):
@@ -67,49 +79,49 @@ class ClassificationTree:
             if (children_left[node_id] != children_right[node_id]):
                 stack.append((children_left[node_id], parent_depth + 1))
                 stack.append((children_right[node_id], parent_depth + 1))
-                self.tree[node_id] = TreeNode(node_id, node_depth[node_id], children_left[node_id], children_right[node_id], feature[node_id], threshold[node_id], False, -1)
+                self.tree[node_id] = TreeNode(node_id, node_depth[node_id], children_left[node_id], children_right[node_id], None, None, feature[node_id], threshold[node_id], False, -1)
             else:
                 is_leaves[node_id] = True
-                self.tree[node_id] = TreeNode(node_id, node_depth[node_id], -1, -1, feature[node_id], threshold[node_id], True, np.argmax(value[node_id]))
+                self.tree[node_id] = TreeNode(node_id, node_depth[node_id], -1, -1, None, None, feature[node_id], threshold[node_id], True, np.argmax(value[node_id]))
 
-        #Imposto i padri
+        #Imposto i padri ogni figlio
         for i in range(len(self.tree)):
             #Verifico se è un branch
             if self.tree[i].left_node_id != self.tree[i].right_node_id:
                 #In tal caso setto i relativi padri
                 self.tree[self.tree[i].left_node_id].parent_id = i
                 self.tree[self.tree[i].right_node_id].parent_id = i
+                self.tree[self.tree[i].id].left_node = self.tree[self.tree[i].left_node_id]
+                self.tree[self.tree[i].id].right_node = self.tree[self.tree[i].right_node_id]
 
         #Costruisco indici elementi del dataset associati ad ogni nodo
-        self.build_idxs_of_subtree(data, range(len(data)), 0)
+        self.build_idxs_of_subtree(data, range(len(data)), self.tree[0])
+
 
 
     #Costruisce la lista degli indici del dataset associati ad ogni nodo del sottoalbero
-    def build_idxs_of_subtree(self, data, idxs, root_id):
+    def build_idxs_of_subtree(self, data, idxs, root_node):
         #Prima svuoto tutte le liste dei nodi del sottoalbero
-        stack = [root_id]
+        stack = [root_node]
         #Finchè non ho esplorato tutto il sottoalbero
         while(len(stack) > 0):
-            actual_id = stack.pop()
+            actual_node = stack.pop()
             #Se il nodo attuale non è una foglia
             #print(actual_id)
-            self.tree[actual_id].data_idxs = []
-            if not self.tree[actual_id].is_leaf:
+            actual_node.data_idxs = []
+            if not actual_node.is_leaf:
                 #Svuoto la lista sua e dei figli
-
-                left_id = self.tree[actual_id].left_node_id
-                right_id = self.tree[actual_id].right_node_id
-                self.tree[left_id].data_idxs = []
-                self.tree[right_id].data_idxs = []
-                stack.append(left_id)
-                stack.append(right_id)
+                actual_node.left_node.data_idxs = []
+                actual_node.right_node.data_idxs = []
+                stack.append(actual_node.left_node)
+                stack.append(actual_node.right_node)
 
         #Guardando il path per ogni elemento del dataset aggiorno gli indici di
         #ogni nodo
         for i in idxs:
-            path = self.get_path_to(data[i], root_id)
-            for node_id in path:
-                self.tree[node_id].data_idxs.append(i)
+            path = self.get_path_to(data[i], root_node)
+            for node in path:
+                node.data_idxs.append(i)
 
 
     #Stampa la struttura dell'albero in modo interpretabile
@@ -135,22 +147,22 @@ class ClassificationTree:
 
 
     #Restituisce la lista degli id dei nodi appartenenti al percorso di decisione per x
-    #nel sottoalbero con radice in root_id.
-    def get_path_to(self, x, root_id):
+    #nel sottoalbero con radice in root_node.
+    def get_path_to(self, x, root_node):
 
         #Parto dalla root e definisco il percorso
-        actual_id = root_id
-        path = [actual_id]
+        actual_node = root_node
+        path = [actual_node]
         #Finchè non trovo una foglia
-        while(not self.tree[actual_id].is_leaf):
+        while(not actual_node.is_leaf):
             #Decido quale sarà il prossimo figlio
-            feature = self.tree[actual_id].feature
-            thresh = self.tree[actual_id].threshold
+            feature = actual_node.feature
+            thresh = actual_node.threshold
             if x[feature] <= thresh:
-                actual_id = self.tree[actual_id].left_node_id
+                actual_node = actual_node.left_node
             else:
-                actual_id = self.tree[actual_id].right_node_id
-            path.append(actual_id)
+                actual_node = actual_node.right_node
+            path.append(actual_node)
 
         return path
 
@@ -164,34 +176,37 @@ class ClassificationTree:
         return nodes
 
 
-    #Predice la label degli elementi data nel sottoalbero con radice root_id
-    def predict_label(self, data, root_id):
+    #Predice la label degli elementi data nel sottoalbero con radice root_node
+    def predict_label(self, data, root_node):
 
         predictions = []
         for x in data[:,]:
             #Se è una foglia ritorno il suo valore
-            if self.tree[root_id].is_leaf:
-                predictions.append(self.tree[root_id].value)
+            if root_node.is_leaf:
+                predictions.append(root_node.value)
             else:
-                path = self.get_path_to(x, root_id)
-                leaf_id = path[-1]
-                label = self.tree[leaf_id].value
+                path = self.get_path_to(x, root_node)
+                leaf_node = path[-1]
+                label = leaf_node.value
                 predictions.append(label)
         return predictions
 
 
-    #Restituisce id della foglia del sottoalbero con radice in root_id che predice x
-    def predict_leaf(self, x, root_id):
-        path = self.get_path_to(x, root_id)
-        return path[-1]
+    #Restituisce id della foglia del sottoalbero con radice in root_node che predice x
+    def predict_leaf(self, x, root_node):
+        path = self.get_path_to(x, root_node)
+        return path[-1].id
 
 
-    #Restituisce la loss del sottoalbero con radice in root_id
-    def misclassification_loss(self, data, target, root_id):
+    #Restituisce la loss del sottoalbero con radice in root_node
+    def misclassification_loss(self, data, target, root_node):
         #data = data[self.tree[root_id].data_idxs]
         #target = target[self.tree[root_id].data_idxs]
-        n_misclassified = np.count_nonzero(target-self.predict_label(data, root_id))
-        return n_misclassified/len(data)
+        if len(data) > 0:
+            n_misclassified = np.count_nonzero(target-self.predict_label(data, root_node))
+            return n_misclassified/len(data)
+        else:
+            return 0
 
 
 
