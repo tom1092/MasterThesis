@@ -143,12 +143,12 @@ node = TreeNode(0, 0, None, None, None, None, 0, 0, 0, None)
 for j in range(len(X[0])):
     node.feature = j
     node.threshold = 1
-    print("ottimizzo feature: ", j)
+
 
 
     #opt_t = gradient_descend(1, node, X, labels)
-    opt_t = minimize(quadratically_loss, 0, args = (node, X, labels), method='L-BFGS-B').x
-
+    opt_t = minimize(quadratically_loss, 0, args = (node, X, labels), method='BFGS', tol = 1e-04).x
+    print("ottimizzo feature: ", j)
     err = quadratically_loss(opt_t, node, X, labels)
     if err < best:
         best = err

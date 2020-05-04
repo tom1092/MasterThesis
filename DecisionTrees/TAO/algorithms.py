@@ -13,7 +13,7 @@ class TAO:
         self.X = []
         self.y = []
 
-    def evolve(self, X, y, n_iter = 5):
+    def evolve(self, X, y, n_iter = 5, min_size_prune = 1):
         self.X = X
         self.y = y
         for i in range(n_iter):
@@ -37,7 +37,7 @@ class TAO:
                 #Rimetto apposto i punti associati ad ogni nodo
                 self.classification_tree.build_idxs_of_subtree(X, range(len(X)), T.tree[0], oblique = T.oblique)
         #Effettua il pruning finale per togliere dead branches e pure subtrees
-        self.prune()
+        #self.prune(min_size = min_size_prune)
 
     def optimize_nodes(self, node):
             #print ("node id = ", node.id, "depth = ", node.depth)
@@ -192,7 +192,7 @@ class TAO:
 
 
     #Alla fine tolgo dead branches e pure subtrees
-    def prune(self, min_size=4):
+    def prune(self, min_size=1):
         #Prima controllo se ci sono sottoalberi puri.
         #Visito l'albero e verifico se esistono nodi branch ai quali arrivano punti associati a solo una label
         #Poi vedo se il nodo attuale è morto

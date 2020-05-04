@@ -91,6 +91,33 @@ class ClassificationTree:
         self.build_idxs_of_subtree(data, range(len(data)), self.tree[0], oblique = self.oblique)
 
 
+    #Dato un albero ne crea uno nuovo con stessi parametri
+    @staticmethod
+    def copy_tree(tree):
+        new = ClassificationTree(min_samples=tree.min_samples, oblique = tree.oblique)
+        new.depth = tree.depth
+        new.n_leaves = tree.n_leaves
+        for (node_id, node) in tree.tree.items():
+            new.tree[node_id] = TreeNode(node_id, node.depth, node.left_node_id, node.right_node_id, None, None, node.feature, node.threshold, node.is_leaf, node.value)
+            new.tree[node_id].parent_id = node.parent_id
+            new.tree[node_id].data_idxs = node.data_idxs
+            new.tree[node_id].weights = node.weights
+            new.tree[node_id].intercept = node.intercept
+
+        #Ora che ho istanziato tutti i nodi vado a settare i puntatori ai figli per ogni nodo
+        #Uso una BFS
+        stack = [new.tree[0]]
+        while stack:
+            actual = stack.pop()
+            if not actual.is_leaf:
+                actual.left_node = new.tree[actual.left_node_id]
+                actual.right_node = new.tree[actual.right_node_id]
+                stack.append(actual.left_node)
+                stack.append(actual.right_node)
+
+        return new
+
+
     #Ritorna la lista dei nodi alla profondità desiderata
     @staticmethod
     def get_nodes_at_depth(depth, tree):

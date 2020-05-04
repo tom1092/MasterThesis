@@ -15,7 +15,7 @@ dataset = load_iris()
 data = dataset.data
 label = dataset.target
 
-n_trial = 5
+n_trial = 1
 val_split = 0.2
 clf_train_score, tao_train_score, ls_train_score = 0, 0, 0
 clf_valid_score, tao_valid_score, ls_valid_score = 0, 0, 0
