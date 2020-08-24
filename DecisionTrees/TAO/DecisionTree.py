@@ -1,11 +1,9 @@
 from sklearn.tree import DecisionTreeClassifier
 from sklearn import tree
 from sklearn.utils import class_weight
-import matplotlib.pyplot as plt
-import csv
 import numpy as np
-from sklearn.datasets import load_iris
-from numba import jitclass, boolean, int32, float32
+from sklearn.metrics import roc_auc_score
+
 
 
 class TreeNode:
@@ -24,6 +22,7 @@ class TreeNode:
         self.data_idxs = []
         self.weights = None
         self.intercept = None
+        self.prob = None
 
 
     #Dato un nodo ne restituisce uno nuovo con stessi attributi
@@ -136,7 +135,7 @@ class ClassificationTree:
 
         for i in self.tree.keys():
             if self.tree[i].is_leaf:
-                print("%snode=%s is child of node %s. It's a leaf node." % (self.tree[i].depth * "\t", i, self.tree[i].parent_id))
+                print("%snode=%s is child of node %s. It's a leaf node. Value: %s" % (self.tree[i].depth * "\t", i, self.tree[i].parent_id, self.tree[i].value))
             else:
                 print("%snode=%s is child of node %s. It's a test node: go to node %s if X[:, %s] <= %s else to "
                       "node %s."
@@ -224,8 +223,8 @@ class ClassificationTree:
 
     #Restituisce id della foglia del sottoalbero con radice in root_node che predice x
     @staticmethod
-    def predict_leaf(x, root_node):
-        path = ClassificationTree.get_path_to(x, root_node)
+    def predict_leaf(x, root_node, oblique):
+        path = ClassificationTree.get_path_to(x, root_node, oblique)
         return path[-1].id
 
 
@@ -259,8 +258,8 @@ class ClassificationTree:
             T[actual_node.id] = actual_node
             ids.append(actual_node.id)
             if not actual_node.is_leaf:
-                stack.append(actual_node.right_node)
                 stack.append(actual_node.left_node)
+                stack.append(actual_node.right_node)
             else:
                 leaves.append(actual_node.id)
         tree.depth = depth
@@ -362,6 +361,34 @@ class ClassificationTree:
                 stack.append(actual.right_node)
         return features
 
+
+    def compute_prob(self, X, labels):
+        root = self.tree[0]
+        stack = [root]
+        while stack:
+            actual = stack.pop()
+            if actual.is_leaf:
+                leaf_labels = labels[actual.data_idxs]
+                n = len(leaf_labels)
+                n_positive = np.count_nonzero(leaf_labels == 1)
+                actual.prob = n_positive/n
+            else:
+                stack.append(actual.left_node)
+                stack.append(actual.right_node)
+
+
+    def predict_prob(self, point, labels):
+        leaf = self.tree[self.predict_leaf(point, self.tree[0], self.oblique)]
+        return leaf.prob
+
+    #Ritorna la misura Area Under the Curve
+    def auc(self, X, labels):
+        pred = []
+        for x in X[:,]:
+            pred.append(self.predict_prob(x, labels))
+        #print(pred)
+        area = roc_auc_score(labels, pred)
+        return area
 
 
 

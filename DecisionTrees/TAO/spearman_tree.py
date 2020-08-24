@@ -57,10 +57,10 @@ def best_split(node, X, labels):
 
 #X = np.random.uniform(size = (500, 10))
 #labels = np.random.randint(0, high=2, size= (500, ))
-data = np.load('artrite_train.npy')
-y = np.load('artrite_label.npy')
+data = np.load('banknote_train.npy')
+y = np.load('banknote_label.npy')
 clf_train, clf_valid, spear_train, spear_valid = 0, 0, 0, 0
-for i in range(30):
+for i in range(1):
     idx = np.random.permutation(len(data))
     data = data[idx]
     y = y[idx]
@@ -90,9 +90,31 @@ for i in range(30):
             #print("actual node ", actual_node.data_idxs)
             actual_node.feature = best_feature
             actual_node.threshold, actual_node.left_node, actual_node.right_node = best_split(actual_node, X, labels)
+
             #ClassificationTree.build_idxs_of_subtree(X, actual_node.data_idxs, actual_node, False)
             to_optimize.append(actual_node.left_node)
             to_optimize.append(actual_node.right_node)
+
+
+    stack = [node]
+    while stack:
+        actual_node = stack.pop()
+        if actual_node.is_leaf:
+            print("%snode=%s is child of node %s. It's a leaf node. Value: %s" % (actual_node.depth * "\t", actual_node.id, actual_node.parent_id, actual_node.value))
+        else:
+            print("%snode=%s is child of node %s. It's a test node: go to node %s if X[:, %s] <= %s else to "
+                  "node %s."
+                  % (actual_node.depth * "\t",
+                     actual_node.id,
+                     actual_node.parent_id,
+                     actual_node.left_node_id,
+                     actual_node.feature,
+                     actual_node.threshold,
+                     actual_node.right_node_id,
+                     ))
+            stack.append(actual_node.left_node)
+            stack.append(actual_node.right_node)
+
 
     spear_train+=1-zero_one_loss(node, X, labels)/len(labels)
     spear_valid+=1-zero_one_loss(node, X_valid, y_valid)/len(y_valid)
@@ -102,6 +124,10 @@ for i in range(30):
     clf_train += clf.score(X, labels)
     clf_valid += clf.score(X_valid, y_valid)
 
+    L = ClassificationTree(oblique = False)
+    L.initialize_from_CART(X, labels, clf)
+
+    L.print_tree_structure()
 print("clf train: ", clf_train/30)
 print("spearman train: ", spear_train/30)
 print("clf valid: ", clf_valid/30)

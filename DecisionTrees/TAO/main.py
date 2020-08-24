@@ -8,18 +8,19 @@ import numpy as np
 from sklearn.datasets import load_iris, load_digits
 from DecisionTree import TreeNode, ClassificationTree
 from algorithms import TAO, LocalSearch
-
+from sklearn.model_selection import train_test_split
 
 
 dataset = load_iris()
 data = dataset.data
 label = dataset.target
 
-n_trial = 1
-val_split = 0.2
+n_trial = 3
+val_split = 0.4
 clf_train_score, tao_train_score, ls_train_score = 0, 0, 0
 clf_valid_score, tao_valid_score, ls_valid_score = 0, 0, 0
-
+cart_auc_train, tao_auc_train, ls_auc_train = 0, 0, 0
+cart_auc_valid, tao_auc_valid, ls_auc_valid = 0, 0, 0
 #data = dataset.data[idx]
 #label = dataset.target[idx]
 
@@ -31,7 +32,7 @@ for i in range(n_trial):
     data = np.load('cancer_train.npy')
     label = np.load('cancer_label.npy')
 
-
+    '''
     idx = np.random.permutation(len(data))
     data = data[idx]
     label = label[idx]
@@ -43,14 +44,21 @@ for i in range(n_trial):
 
     X_valid = data[valid_id:]
     y_valid = label[valid_id:]
+    '''
+    X_train, X_valid, y_train, y_valid = train_test_split(data, label,
+                                                stratify=label,
+                                                test_size=0.2)
 
 
 
-
-    clf = DecisionTreeClassifier(random_state=0, max_depth=3, min_samples_leaf=4)
+    clf = DecisionTreeClassifier(random_state=0, max_depth=3, min_samples_leaf=10)
     clf.fit(X_train, y_train)
+
     T = ClassificationTree(oblique = False)
     T.initialize_from_CART(X_train, y_train, clf)
+    T.compute_prob(X_train, y_train)
+    cart_auc_train += T.auc(X_train, y_train)
+    cart_auc_valid += T.auc(X_valid, y_valid)
     #tao_train_score+=1-T.misclassification_loss(X_train, y_train, T.tree[0])
     #print ("score before: ", tao_train_score)
 #x = data[8]
@@ -68,14 +76,20 @@ for i in range(n_trial):
 #print (T.predict_label(x, node_id))
 #for (id, node) in T.tree.items():
     #print("Prima: node ", id, " items -->", node.data_idxs)
+    T.print_tree_structure()
     tao = TAO(T)
     tao.evolve(X_train, y_train)
-
+    T.compute_prob(X_train, y_train)
+    tao_auc_train += T.auc(X_train, y_train)
+    tao_auc_valid += T.auc(X_valid, y_valid)
 
     L = ClassificationTree(oblique = False)
     L.initialize_from_CART(X_train, y_train, clf)
     ls = LocalSearch(L)
     ls.evolve(X_train, y_train, alfa=1000000, max_iteration=10)
+    L.compute_prob(X_train, y_train)
+    ls_auc_train += L.auc(X_train, y_train)
+    ls_auc_valid += L.auc(X_valid, y_valid)
     clf_train_score+=clf.score(X_train, y_train)
     tao_train_score+=1-T.misclassification_loss(T.tree[0], X_train, y_train, range(len(X_train)), T.oblique)
     ls_train_score+=1-L.misclassification_loss(L.tree[0], X_train, y_train, range(len(X_train)), L.oblique)
@@ -91,12 +105,18 @@ for i in range(n_trial):
 print ("LS train acc -> ", ls_train_score/n_trial, "Depth: ", L.depth)
 print ("TAO train acc -> ", tao_train_score/n_trial, "Depth: ", T.depth)
 print ("CART train acc -> ", clf_train_score/n_trial)
+print ("LS auc train -> ", ls_auc_train/n_trial, "Depth: ", L.depth)
+print ("TAO auc train -> ", tao_auc_train/n_trial, "Depth: ", T.depth)
+print ("CART auc train -> ", cart_auc_train/n_trial)
 
-L.print_tree_structure()
+#L.print_tree_structure()
 T.print_tree_structure()
 print ("LS valid acc -> ", ls_valid_score/n_trial)
 print ("TAO valid acc -> ", tao_valid_score/n_trial)
 print ("CART valid acc -> ", clf_valid_score/n_trial)
+print ("LS auc valid -> ", ls_auc_valid/n_trial, "Depth: ", L.depth)
+print ("TAO auc valid -> ", tao_auc_valid/n_trial, "Depth: ", T.depth)
+print ("CART auc valid -> ", cart_auc_valid/n_trial)
 #print(to_delete)
 #print (lab)
 #print (L.predict_label(test, 0))

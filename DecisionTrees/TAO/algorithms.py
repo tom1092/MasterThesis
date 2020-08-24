@@ -1,22 +1,21 @@
 import numpy as np
-import multiprocessing
-from joblib import Parallel, delayed
 import os
-import matplotlib.pyplot as plt
 import random
 from DecisionTree import TreeNode, ClassificationTree
 from sklearn.svm import LinearSVC
 
 class TAO:
-    def __init__(self, tree, oblique = False):
+    def __init__(self, tree, oblique = False, train_on_all_features = True):
         self.classification_tree = tree
         self.X = []
         self.y = []
+        self.train_on_all_features = train_on_all_features
 
-    def evolve(self, X, y, n_iter = 5, min_size_prune = 1):
+    def evolve(self, X, y, n_iter = 7, min_size_prune = 1):
         self.X = X
         self.y = y
         for i in range(n_iter):
+            #print("TAO iter ", i, " di ", n_iter)
             for depth in reversed(range(self.classification_tree.depth + 1)):
                 #print("Ottimizzo depth", depth, "....")
                 T = self.classification_tree
@@ -38,7 +37,7 @@ class TAO:
                 self.classification_tree.build_idxs_of_subtree(X, range(len(X)), T.tree[0], oblique = T.oblique)
         #Effettua il pruning finale per togliere dead branches e pure subtrees
         #self.prune(min_size = min_size_prune)
-
+        ClassificationTree.restore_tree(self.classification_tree)
     def optimize_nodes(self, node):
             #print ("node id = ", node.id, "depth = ", node.depth)
             #print("ottimizzo nodo: ", node.id)
@@ -84,7 +83,7 @@ class TAO:
 
         #Itero sulle componenti
         #print ("Ottimizzo nodo:", node_id)
-        if len(care_points_idxs) > 0:
+        if len(care_points_idxs) > 1:
             #print(len(care_points_idxs))
             if T.oblique:
                 best_t, best_weights = self.TAO_best_SVM_split(node_id, X, y, care_points_idxs, correct_classification_tuples, T)
@@ -127,10 +126,17 @@ class TAO:
 
     #Qui faccio uno split parallelo agli assi
     def TAO_best_parallel_split(self, node_id, X, y, care_points_idxs, correct_classification_tuples, T):
+        #print ("node id:", node_id)
         error_best = np.inf
         best_t = T.tree[node_id].threshold
         best_feature = T.tree[node_id].feature
-        for j in range(len(X[0])):
+        if self.train_on_all_features:
+            features = range(len(X[0]))
+        else:
+            features = ClassificationTree.get_features(T)
+
+        for j in features:
+            #print(j)
             #Prendo tutte le j-esime componenti del dataset e le ordino
             #in modo crescente
             vals = {}
@@ -142,8 +148,9 @@ class TAO:
             #plt.scatter(X[sorted_indexes, j], range(len(values)), s=0.4, c=list(correct_classification_tuples.values()))
             #plt.show()
             T.tree[node_id].feature = j
-            thresh = 0.5*X[sorted_indexes[0], j]
-            actual_loss = self.zero_one_loss(node_id, X, y, sorted_indexes, correct_classification_tuples, thresh)
+            thresh = 0.5*(X[sorted_indexes[0], j]+X[sorted_indexes[1], j])
+            actual_loss, start = self.zero_one_loss(node_id, X, y, sorted_indexes, correct_classification_tuples, thresh, sorted_indexes)
+
             #if j==2:
                 #base = actual_loss
             #actual_loss = self.binary_loss(node_id, X, y, sorted_indexes[i], correct_classification_tuples[sorted_indexes[i]], actual_loss, thresh)
@@ -151,12 +158,16 @@ class TAO:
             #print("vecchia: ", self.vecchia_loss(node_id, X, y, care_points_idxs, correct_classification_tuples, thresh))
             #Ciclo su ogni valore di quella componente e provo tutti gli split
             #possibili
-            i = 0
-            while i < len(sorted_indexes):
-                if i < len(sorted_indexes)-1:
-                    thresh = 0.5*(X[sorted_indexes[i], j]+X[sorted_indexes[i+1], j])
-                else:
-                    thresh = 1.5*X[sorted_indexes[i], j]
+            if actual_loss < error_best:
+                error_best = actual_loss
+                best_t = thresh
+                best_feature = j
+            i = start
+            while i < len(sorted_indexes)-1:
+
+
+                thresh = 0.5*(X[sorted_indexes[i], j]+X[sorted_indexes[i+1], j])
+
                 #sum, k = self.binary_loss(X, j, sorted_indexes, i, correct_classification_tuples)
                 #actual_loss += sum
 
@@ -169,25 +180,30 @@ class TAO:
                     print(X[sorted_indexes, j])
                     print()
                 '''
-                actual_loss = self.zero_one_loss(node_id, X, y, care_points_idxs, correct_classification_tuples, thresh)
+                #actual_loss = self.zero_one_loss(node_id, X, y, care_points_idxs, correct_classification_tuples, thresh)
+
+                s, k = self.binary_loss(X, j, sorted_indexes, i, correct_classification_tuples)
+                #print ("dopo binary")
+                actual_loss += s
                 if actual_loss < error_best:
                     error_best = actual_loss
                     best_t = thresh
                     best_feature = j
-                i+=1
+                i+=k
 
             '''
             #print(error_best)
             #errors = [self.binary_loss(node_id, X, y, care_points_idxs, correct_classification_tuples, threshes[i]) for i in range(len(values)-1)]
             #min_index = np.argmin(errors)
-
-        #Ancora print per debug
-        if node_id==3:
-            print("finale: ", error_best)
-            print ("ones:", ones, " len:  ", len(ones), "   care_p_len:", len(care_points_idxs))
-            print("best_feature:", best_feature, "   best_thresh:", best_t)
-
         '''
+        #Ancora print per debug
+        #if node_id==1:
+            #print("finale: ", error_best)
+            #print ("ones:", ones, " len:  ", len(ones), "   care_p_len:", len(care_points_idxs))
+            #print("best_feature:", best_feature, "   best_thresh:", best_t)
+
+
+
         return best_t, best_feature
 
 
@@ -234,7 +250,7 @@ class TAO:
     #di ciclare su ogni punto del dataset per calcolare di nuovo la loss cambiando il
     #thresh. Ad ogni cambio, essendo i dati ordinati per componente la loss cambia
     #al più di una unità +/- 1. OCCORRE FARE ATTENZIONE A PUNTI UGUALI! VEDI BINARY LOSS
-    def zero_one_loss(self, node_id, X, y, care_points_idxs, correct_classification_tuples, thresh):
+    def zero_one_loss(self, node_id, X, y, care_points_idxs, correct_classification_tuples, thresh, sorted_indexes):
         loss = 0
         T = self.classification_tree.tree
         node = T[node_id]
@@ -245,7 +261,12 @@ class TAO:
         data = X[care_points_idxs]
         predictions = np.array([0 if sample[node.feature] <= thresh else 1 for sample in data[:,]])
         n_misclassified = np.count_nonzero(targets-predictions)
-        return n_misclassified
+        k=0
+        i=0
+        #print("prima del while")
+        while k+i< len(sorted_indexes) and X[sorted_indexes[k+i], node.feature] == X[sorted_indexes[i], node.feature]:
+            k+=1
+        return n_misclassified, k
         #return loss
 
 
@@ -256,12 +277,12 @@ class TAO:
         #se il punto viene inoltrato su un figlio che porta a misclassificazione
         #è errore
         #print("loss")
-        sum = 0
-        k = 1
-        if targets[sorted_indexes[i]] == 0:
-            sum -= 1
-        else:
-            sum +=1
+        #sum = 0
+        #k = 1
+        #if targets[sorted_indexes[i]] == 0:
+            #sum -= 1
+        #else:
+            #sum +=1
 
         #Vedo se ci sono punti uguali che potrebbero dar fastidio con la loss.
         #Se mi fermassi a vedere solo il primo potrei ottenere che lo split migliore
@@ -272,12 +293,15 @@ class TAO:
         #costruendo una loss per maggioranza
         #devo quindi pesare la loss su quanti punti sono classificati bene tra quelli uguali
         #dunque devo guardare i consecutivi
-        while k+i < len(sorted_indexes) - 1 and X[sorted_indexes[k+i], feature] == X[sorted_indexes[i], feature]:
+        sum = 0
+        k = 0
+        while k+i < len(sorted_indexes) and X[sorted_indexes[k+i], feature] == X[sorted_indexes[i], feature]:
             if targets[sorted_indexes[k+i]] == 0:
                 sum -= 1
             else:
                 sum +=1
             k+=1
+        #print (k)
         return sum, k
 
 
@@ -300,7 +324,7 @@ class LocalSearch:
         i = 0
 
 
-        while (i<max_iteration):
+        while (i < max_iteration):
             optimized = []
             error_prev = ClassificationTree.misclassification_loss(T[0], X, y, T[0].data_idxs, self.classification_tree.oblique) + alfa*complexity
 
@@ -320,7 +344,7 @@ class LocalSearch:
                 #print("complexity: ", complexity)
                 #print("ids: ", ids)
                 values = list(set(ids)-set(optimized))
-                print("values dopo restore:  ", values)
+                #print("values dopo restore:  ", values)
                 self.classification_tree.build_idxs_of_subtree(X, range(len(X)), T[0], self.classification_tree.oblique)
                 error_curr = ClassificationTree.misclassification_loss(T[0], X, y, T[0].data_idxs, self.classification_tree.oblique) + alfa*complexity
             #print(self.max_id)
@@ -329,7 +353,7 @@ class LocalSearch:
                 #self.delete_node(node_id)
 
             i+=1
-            print("Ottimizzato nodi algoritmo ls: ", i, " volte")
+            #print("Ottimizzato nodi algoritmo ls: ", i, " volte")
             if np.abs(error_curr - error_prev) < 1e-01:
                 break
 
